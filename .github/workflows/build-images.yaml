@@ -13,7 +13,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ${{ github.repository_owner }}/bookinfo
+  # Note: repository owner is lowercased for container registry compatibility
+  IMAGE_PREFIX: lutzlange/bookinfo
 
 jobs:
   build-productpage:
