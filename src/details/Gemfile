@@ -1,0 +1,9 @@
+source 'https://rubygems.org'
+
+gem "webrick", "~> 1.7"
+
+# OpenTelemetry
+gem "opentelemetry-sdk", "~> 1.4"
+gem "opentelemetry-exporter-otlp", "~> 0.29"
+gem "opentelemetry-instrumentation-all", "~> 0.68"
+
