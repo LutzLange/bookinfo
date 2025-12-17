@@ -14,10 +14,14 @@
 
 FROM ruby:3.4.3-slim
 
+# Install build dependencies for native gems (google-protobuf, etc.)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /opt/microservices
 COPY Gemfile /opt/microservices/
-# Regenerate Gemfile.lock for the target platform
-RUN bundle lock --add-platform ruby && bundle install
+RUN bundle install
 
 COPY details.rb /opt/microservices/
 
