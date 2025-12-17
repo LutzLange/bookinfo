@@ -15,8 +15,9 @@
 FROM ruby:3.4.3-slim
 
 WORKDIR /opt/microservices
-COPY Gemfile Gemfile.lock /opt/microservices/
-RUN bundle install
+COPY Gemfile /opt/microservices/
+# Regenerate Gemfile.lock for the target platform
+RUN bundle lock --add-platform ruby && bundle install
 
 COPY details.rb /opt/microservices/
 
