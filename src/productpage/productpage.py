@@ -19,6 +19,7 @@ from flask import Flask, request, session, render_template, redirect, g
 from json2html import json2html
 from opentelemetry import trace
 from opentelemetry.instrumentation.flask import FlaskInstrumentor
+from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from opentelemetry.propagate import set_global_textmap
 from opentelemetry.propagators.composite import CompositePropagator
 from opentelemetry.propagators.b3 import B3MultiFormat
@@ -43,6 +44,7 @@ http_client.HTTPConnection.debuglevel = 0
 
 app = Flask(__name__)
 FlaskInstrumentor().instrument_app(app)
+RequestsInstrumentor().instrument()
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 requests_log = logging.getLogger("requests.packages.urllib3")
 requests_log.setLevel(logging.INFO)
