@@ -20,7 +20,9 @@ from json2html import json2html
 from opentelemetry import trace
 from opentelemetry.instrumentation.flask import FlaskInstrumentor
 from opentelemetry.propagate import set_global_textmap
+from opentelemetry.propagators.composite import CompositePropagator
 from opentelemetry.propagators.b3 import B3MultiFormat
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -115,8 +117,10 @@ request_result_counter = Counter('request_result', 'Results of requests', ['dest
 # extract/inject context, etc.
 
 
-propagator = B3MultiFormat()
-set_global_textmap(B3MultiFormat())
+# Use a composite propagator that supports both W3C TraceContext (from gloo-gateway/ztunnel)
+# and B3 (for backward compatibility with older services)
+propagator = CompositePropagator([TraceContextTextMapPropagator(), B3MultiFormat()])
+set_global_textmap(propagator)
 provider = TracerProvider()
 
 # Configure OTLP exporter if endpoint is set
@@ -134,11 +138,12 @@ tracer = trace.get_tracer(__name__)
 def getForwardHeaders(request):
     headers = {}
 
-    # x-b3-*** headers can be populated using the OpenTelemetry span
+    # Extract trace context from incoming request and inject into outgoing headers.
+    # The composite propagator handles both W3C TraceContext (traceparent) and B3 headers.
     ctx = propagator.extract(carrier={k.lower(): v for k, v in request.headers})
     propagator.inject(headers, ctx)
 
-    # We handle other (non x-b3-***) headers manually
+    # We handle other headers manually
     if 'user' in session:
         headers['end-user'] = session['user']
 
@@ -163,10 +168,9 @@ def getForwardHeaders(request):
         'x-datadog-parent-id',
         'x-datadog-sampling-priority',
 
-        # W3C Trace Context. Compatible with OpenCensusAgent and Stackdriver Istio
-        # configurations.
-        'traceparent',
-        'tracestate',
+        # W3C Trace Context - now handled by OpenTelemetry propagator above
+        # 'traceparent',
+        # 'tracestate',
 
         # Cloud trace context. Compatible with OpenCensusAgent and Stackdriver Istio
         # configurations.
