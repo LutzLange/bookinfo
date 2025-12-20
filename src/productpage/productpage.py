@@ -140,12 +140,11 @@ tracer = trace.get_tracer(__name__)
 def getForwardHeaders(request):
     headers = {}
 
-    # Extract trace context from incoming request and inject into outgoing headers.
-    # The composite propagator handles both W3C TraceContext (traceparent) and B3 headers.
-    ctx = propagator.extract(carrier={k.lower(): v for k, v in request.headers})
-    propagator.inject(headers, ctx)
+    # NOTE: Trace context (traceparent, tracestate, x-b3-*) is automatically handled
+    # by RequestsInstrumentor which creates proper child spans for outgoing requests
+    # and injects the correct trace context. We only forward non-trace headers here.
 
-    # We handle other headers manually
+    # We handle non-trace headers manually
     if 'user' in session:
         headers['end-user'] = session['user']
 
