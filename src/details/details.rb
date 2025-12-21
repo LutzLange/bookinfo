@@ -24,9 +24,23 @@ if ENV['OTEL_EXPORTER_OTLP_ENDPOINT']
   require 'opentelemetry/exporter/otlp'
   require 'opentelemetry/instrumentation/all'
 
+  # The Ruby OTLP exporter uses HTTP by default, not gRPC.
+  # Port 4317 is for gRPC, port 4318 is for HTTP.
+  # Convert gRPC endpoint to HTTP endpoint if needed.
+  otlp_endpoint = ENV['OTEL_EXPORTER_OTLP_ENDPOINT']
+  if otlp_endpoint.include?(':4317')
+    otlp_endpoint = otlp_endpoint.gsub(':4317', ':4318')
+    puts "Converted OTLP endpoint to HTTP: #{otlp_endpoint}"
+  end
+
   OpenTelemetry::SDK.configure do |c|
     c.service_name = 'details'
     c.service_version = ENV['SERVICE_VERSION'] || 'v1'
+    c.add_span_processor(
+      OpenTelemetry::SDK::Trace::Export::BatchSpanProcessor.new(
+        OpenTelemetry::Exporter::OTLP::Exporter.new(endpoint: otlp_endpoint)
+      )
+    )
     c.use_all() # enables all instrumentation
   end
   puts "OpenTelemetry tracing initialized for details service"
