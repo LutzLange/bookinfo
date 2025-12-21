@@ -19,6 +19,7 @@ require 'json'
 require 'net/http'
 
 # OpenTelemetry setup
+$tracer = nil
 if ENV['OTEL_EXPORTER_OTLP_ENDPOINT']
   require 'opentelemetry/sdk'
   require 'opentelemetry/exporter/otlp'
@@ -35,7 +36,8 @@ if ENV['OTEL_EXPORTER_OTLP_ENDPOINT']
   unless otlp_endpoint.end_with?('/v1/traces')
     otlp_endpoint = otlp_endpoint.chomp('/') + '/v1/traces'
   end
-  puts "OTLP traces endpoint: #{otlp_endpoint}"
+  $stdout.puts "OTLP traces endpoint: #{otlp_endpoint}"
+  $stdout.flush
 
   OpenTelemetry::SDK.configure do |c|
     c.service_name = 'details'
@@ -47,9 +49,21 @@ if ENV['OTEL_EXPORTER_OTLP_ENDPOINT']
     )
     c.use_all() # enables all instrumentation
   end
-  puts "OpenTelemetry tracing initialized for details service"
+  $tracer = OpenTelemetry.tracer_provider.tracer('details', ENV['SERVICE_VERSION'] || 'v1')
+  $stdout.puts "OpenTelemetry tracing initialized for details service"
+  $stdout.flush
 else
-  puts "OTEL_EXPORTER_OTLP_ENDPOINT not set, tracing disabled"
+  $stdout.puts "OTEL_EXPORTER_OTLP_ENDPOINT not set, tracing disabled"
+  $stdout.flush
+end
+
+# Helper to extract trace context from incoming request headers
+def extract_context(req)
+  carrier = {}
+  req.each do |header, value|
+    carrier[header.downcase] = value
+  end
+  OpenTelemetry.propagation.extract(carrier)
 end
 
 if ARGV.length < 1 then
@@ -74,22 +88,45 @@ server.mount_proc '/health' do |req, res|
 end
 
 server.mount_proc '/details' do |req, res|
-    pathParts = req.path.split('/')
-    headers = get_forward_headers(req)
+    # Extract trace context from incoming request and create span
+    parent_context = $tracer ? extract_context(req) : OpenTelemetry::Context.current
 
-    begin
-        begin
-          id = Integer(pathParts[-1])
-        rescue
-          raise 'please provide numeric product id'
+    span_proc = proc do
+      pathParts = req.path.split('/')
+      headers = get_forward_headers(req)
+
+      begin
+          begin
+            id = Integer(pathParts[-1])
+          rescue
+            raise 'please provide numeric product id'
+          end
+          details = get_book_details(id, headers)
+          res.body = details.to_json
+          res['Content-Type'] = 'application/json'
+      rescue => error
+          res.body = {'error' => error}.to_json
+          res['Content-Type'] = 'application/json'
+          res.status = 400
+      end
+    end
+
+    if $tracer
+      OpenTelemetry::Context.with_current(parent_context) do
+        $tracer.in_span("GET #{req.path}",
+          attributes: {
+            'http.method' => req.request_method,
+            'http.url' => req.request_uri.to_s,
+            'http.target' => req.path
+          },
+          kind: :server
+        ) do |span|
+          span_proc.call
+          span.set_attribute('http.status_code', res.status)
         end
-        details = get_book_details(id, headers)
-        res.body = details.to_json
-        res['Content-Type'] = 'application/json'
-    rescue => error
-        res.body = {'error' => error}.to_json
-        res['Content-Type'] = 'application/json'
-        res.status = 400
+      end
+    else
+      span_proc.call
     end
 end
 
