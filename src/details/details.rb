@@ -26,12 +26,16 @@ if ENV['OTEL_EXPORTER_OTLP_ENDPOINT']
 
   # The Ruby OTLP exporter uses HTTP by default, not gRPC.
   # Port 4317 is for gRPC, port 4318 is for HTTP.
-  # Convert gRPC endpoint to HTTP endpoint if needed.
+  # Also, the Ruby exporter requires the full path including /v1/traces
   otlp_endpoint = ENV['OTEL_EXPORTER_OTLP_ENDPOINT']
   if otlp_endpoint.include?(':4317')
     otlp_endpoint = otlp_endpoint.gsub(':4317', ':4318')
-    puts "Converted OTLP endpoint to HTTP: #{otlp_endpoint}"
   end
+  # Ensure endpoint includes the traces path for HTTP OTLP
+  unless otlp_endpoint.end_with?('/v1/traces')
+    otlp_endpoint = otlp_endpoint.chomp('/') + '/v1/traces'
+  end
+  puts "OTLP traces endpoint: #{otlp_endpoint}"
 
   OpenTelemetry::SDK.configure do |c|
     c.service_name = 'details'
